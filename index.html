@@ -1,0 +1,483 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Bowling Tracker</title>
+<meta name="theme-color" content="#12212E">
+<meta name="description" content="Season-by-season bowling scoresheets with averages, records and a trend chart.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Bowling">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Big+Shoulders+Display:wght@700;800&display=swap">
+<style>
+/* Layout: season tabs on top, one hero number, six record tiles, a week-by-week chart, then the scoresheet you type into. */
+:root{
+  --bg:#E9EEF2; --surface:#FFFFFF; --surface2:#F3F6F8; --ink:#12212E; --muted:#5B6B79; --line:#D5DDE4;
+  --accent:#0E7C86; --hot:#C0332A; --hot-bg:#FBE6E3; --board-a:#F7F9FA; --board-b:#EEF2F5;
+  --f-display:"Big Shoulders Display","Arial Narrow",Impact,sans-serif;
+  --f-body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0C151C; --surface:#14212B; --surface2:#1A2B37; --ink:#E6EEF3; --muted:#8FA3B2; --line:#263744;
+    --accent:#3CC0CC; --hot:#FF7A6B; --hot-bg:#3A1E1C; --board-a:#162531; --board-b:#12202A; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0C151C; --surface:#14212B; --surface2:#1A2B37; --ink:#E6EEF3; --muted:#8FA3B2; --line:#263744;
+  --accent:#3CC0CC; --hot:#FF7A6B; --hot-bg:#3A1E1C; --board-a:#162531; --board-b:#12202A; color-scheme:dark;
+}
+html{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);-webkit-text-size-adjust:100%}
+*{box-sizing:border-box}
+body{margin:0}
+
+body{
+  background:var(--bg); color:var(--ink); font-family:var(--f-body); font-size:15px; line-height:1.45;
+  padding-block:20px 48px;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));
+  padding-right:max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap{max-width:980px; margin:0 auto; display:flex; flex-direction:column; gap:16px}
+.num{font-variant-numeric:tabular-nums}
+button{font:inherit; color:inherit}
+:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+
+.top{display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap}
+.brand{display:flex; align-items:center; gap:12px; min-width:0}
+.pins{flex:none; color:var(--ink)}
+h1{font-family:var(--f-display); font-weight:800; font-size:34px; line-height:1; margin:0; letter-spacing:.01em; text-transform:uppercase}
+.sub{margin:3px 0 0; color:var(--muted); font-size:13px}
+.status{font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted)}
+
+.tabs{display:flex; gap:8px; flex-wrap:wrap; align-items:center}
+.tab{border:1px solid var(--line); background:var(--surface); border-radius:999px; padding:7px 16px; cursor:pointer; font-weight:600; font-variant-numeric:tabular-nums}
+.tab[aria-selected="true"]{background:var(--ink); color:var(--bg); border-color:var(--ink)}
+.tab.add{background:transparent; border-style:dashed; color:var(--muted); font-weight:500}
+.newseason{display:flex; gap:8px; align-items:center}
+.newseason input{border:1px solid var(--line); background:var(--surface); color:var(--ink); border-radius:999px; padding:7px 14px; width:110px; font:inherit}
+
+.card{background:var(--surface); border:1px solid var(--line); border-radius:12px; min-width:0}
+.hero{overflow:hidden}
+.boards{height:8px; background:repeating-linear-gradient(90deg,var(--board-a) 0 14px,var(--board-b) 14px 28px); border-bottom:1px solid var(--line)}
+.hero-body{display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,1fr); gap:20px 32px; padding:20px 22px 22px}
+.eyebrow{font-size:12px; letter-spacing:.09em; text-transform:uppercase; color:var(--muted); font-weight:600}
+.big{font-family:var(--f-display); font-weight:800; font-size:clamp(64px,13vw,112px); line-height:.95; color:var(--accent); margin-top:4px}
+.slots{display:flex; gap:22px; margin-top:12px; flex-wrap:wrap}
+.slot b{display:block; font-family:var(--f-display); font-size:26px; line-height:1.1}
+.slot span{font-size:12px; color:var(--muted); letter-spacing:.06em; text-transform:uppercase}
+.facts{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; align-content:end}
+.fact{border-left:2px solid var(--line); padding-left:12px}
+.fact b{display:block; font-family:var(--f-display); font-size:34px; line-height:1.05}
+.fact span{font-size:12px; color:var(--muted); letter-spacing:.06em; text-transform:uppercase}
+
+.tiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px}
+.tile{padding:14px 16px; display:flex; flex-direction:column; gap:2px}
+.tile .v{font-family:var(--f-display); font-weight:800; font-size:40px; line-height:1}
+.tile .v.hot{color:var(--hot)}
+.tile .l{font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); font-weight:600}
+.tile .w{font-size:12.5px; color:var(--muted)}
+
+.sect{padding:18px 18px 16px}
+.sect-h{display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:10px}
+h2{margin:0; font-family:var(--f-display); font-weight:700; font-size:22px; letter-spacing:.03em; text-transform:uppercase}
+.legend{display:flex; gap:16px; flex-wrap:wrap; font-size:12.5px; color:var(--muted)}
+.legend i{display:inline-block; vertical-align:middle; margin-right:6px}
+.lg-dot{width:9px; height:9px; border-radius:50%; background:var(--muted); opacity:.6}
+.lg-hot{width:9px; height:9px; border-radius:50%; background:var(--hot)}
+.lg-line{width:18px; height:3px; background:var(--accent); border-radius:2px}
+.lg-dash{width:18px; height:0; border-top:2px dashed var(--muted)}
+#chart{position:relative}
+#chart svg{display:block; width:100%; height:auto; overflow:visible}
+.ax text{fill:var(--muted); font-size:11.5px; font-family:var(--f-body); font-variant-numeric:tabular-nums}
+.gl{stroke:var(--line); stroke-width:1}
+.gl200{stroke:var(--hot); stroke-width:1; stroke-dasharray:3 4; opacity:.55}
+.avgline{fill:none; stroke:var(--accent); stroke-width:2; stroke-linejoin:round; stroke-linecap:round}
+.seasonline{stroke:var(--muted); stroke-width:1.5; stroke-dasharray:5 4}
+.dot{fill:var(--muted); opacity:.6}
+.dot.hot{fill:var(--hot); opacity:1}
+.dot.off,.avgdot.off{opacity:.25}
+.avgdot{fill:var(--surface); stroke:var(--accent); stroke-width:2}
+.cross{stroke:var(--ink); stroke-width:1; opacity:.25}
+.tip{position:absolute; pointer-events:none; background:var(--ink); color:var(--bg); border-radius:8px; padding:8px 10px; font-size:12.5px; line-height:1.4; min-width:120px; z-index:2; box-shadow:0 4px 14px rgba(0,0,0,.18)}
+.tip b{display:block; font-size:13px; margin-bottom:2px}
+.tip div{display:flex; justify-content:space-between; gap:14px; font-variant-numeric:tabular-nums}
+.empty{color:var(--muted); padding:28px 0; text-align:center; margin:0}
+
+.tools{display:flex; gap:8px; flex-wrap:wrap; align-items:center}
+.chip{border:1px solid var(--line); background:var(--surface2); border-radius:999px; padding:5px 12px; font-size:13px; cursor:pointer}
+.chip[aria-pressed="true"]{border-color:var(--accent); color:var(--accent); font-weight:600}
+.chip.primary{background:var(--ink); color:var(--bg); border-color:var(--ink); font-weight:600}
+.scroll{overflow-x:auto}
+table{width:100%; border-collapse:separate; border-spacing:0; min-width:340px}
+th{font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); font-weight:600; text-align:center; padding:6px 4px; border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left; padding-left:6px}
+td{padding:3px 3px; border-bottom:1px solid var(--line); text-align:center; font-variant-numeric:tabular-nums}
+td.wk{font-weight:600; width:64px}
+tr.prac td.wk{color:var(--muted)}
+tr.out{opacity:.5}
+td input{width:100%; max-width:68px; text-align:center; font:inherit; font-variant-numeric:tabular-nums; color:var(--ink); background:transparent; border:1px solid transparent; border-radius:8px; padding:6px 2px}
+td input:hover{border-color:var(--line)}
+td input:focus{border-color:var(--accent); background:var(--surface2); outline:none}
+td input.hot{color:var(--hot); background:var(--hot-bg); font-weight:700}
+td input::placeholder{color:var(--line)}
+td.calc{color:var(--ink)}
+td.calc.dim{color:var(--muted)}
+td.x{width:34px; padding:0}
+.rm{border:0; background:transparent; color:var(--muted); cursor:pointer; border-radius:6px; width:28px; height:28px; opacity:.45}
+.rm:hover,.rm:focus-visible,.rm.armed{opacity:1; color:var(--hot)}
+.rm.armed{width:auto; padding:0 6px; font-size:12px}
+tfoot td{font-weight:700; border-bottom:0; border-top:2px solid var(--ink); padding-top:9px}
+.hint{margin:10px 0 0; font-size:12.5px; color:var(--muted)}
+@media (max-width:560px){
+  .hero-body{grid-template-columns:minmax(0,1fr)}
+  .hide-s{display:none}
+  td.wk{width:44px}
+  .sect{padding:14px 10px 12px}
+  h1{font-size:28px}
+}
+@media (prefers-reduced-motion: no-preference){ .tile,.tab,.chip{transition:background .15s,border-color .15s} }
+.bar{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+.bar .chip{font-size:12.5px}
+#file{display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <svg class="pins" width="38" height="34" viewBox="0 0 38 34" aria-hidden="true" fill="currentColor">
+        <circle cx="5" cy="5" r="3.6"/><circle cx="14" cy="5" r="3.6"/><circle cx="24" cy="5" r="3.6"/><circle cx="33" cy="5" r="3.6"/>
+        <circle cx="9.5" cy="14" r="3.6"/><circle cx="19" cy="14" r="3.6"/><circle cx="28.5" cy="14" r="3.6"/>
+        <circle cx="14" cy="23" r="3.6"/><circle cx="24" cy="23" r="3.6"/>
+        <circle cx="19" cy="32" r="3.6" fill="var(--hot)"/>
+      </svg>
+      <div><h1>Bowling Tracker</h1><p class="sub">Three games a week, season by season</p></div>
+    </div>
+    <div class="bar"><span class="status" id="status" role="status" aria-live="polite"></span><button class="chip" id="exp" type="button">Back up</button><button class="chip" id="imp" type="button">Restore</button><input type="file" id="file" accept="application/json,.json"></div>
+  </header>
+  <nav class="tabs" id="tabs" aria-label="Seasons" role="tablist"></nav>
+  <main id="main" style="display:flex;flex-direction:column;gap:16px">
+    <p class="empty card" style="padding:40px 16px">Loading your scores...</p>
+  </main>
+</div>
+
+<script>
+(function(){
+  var $ = function(s){ return document.querySelector(s); };
+  var state = { seasons: new Map(), active: null, practice: true, canWrite: true, db: null, ready: false, built: null };
+  try { state.practice = localStorage.getItem('bt.practice') !== '0'; state.active = localStorage.getItem('bt.season'); } catch(e){}
+
+  function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  function f1(n){ return n == null ? '–' : (Math.round(n*10)/10).toFixed(1); }
+  function f0(n){ return n == null ? '–' : String(Math.round(n)); }
+  function isP(l){ return /^P/i.test(l); }
+  function wkName(l){ return isP(l) ? 'Practice ' + String(l).slice(1) : 'Week ' + l; }
+  function setStatus(t){ $('#status').textContent = t; }
+
+  /* ---------- math ---------- */
+  function calc(s){
+    var rows = s.weeks.map(function(w){
+      var ent = w.g.filter(function(v){ return v != null; });
+      var sum = ent.reduce(function(a,b){ return a + b; }, 0);
+      var complete = ent.length === 3;
+      return { l: w.l, g: w.g, n: ent.length, sum: sum, avg: ent.length ? sum/ent.length : null,
+        complete: complete, spread: complete ? Math.max.apply(null, ent) - Math.min.apply(null, ent) : null,
+        prac: isP(w.l), inc: !isP(w.l) || state.practice };
+    });
+    var hi = null, lo = null, pins = 0, count = 0, n200 = 0, slotSum = [0,0,0], slotN = [0,0,0];
+    var hs = null, ls = null, ha = null, la = null, serSum = 0, serN = 0, sprSum = 0;
+    rows.forEach(function(r){
+      if (!r.inc) return;
+      r.g.forEach(function(v, i){
+        if (v == null) return;
+        pins += v; count++; slotSum[i] += v; slotN[i]++;
+        if (v >= 200) n200++;
+        if (!hi || v > hi.v) hi = { v: v, l: r.l, gi: i };
+        if (!lo || v < lo.v) lo = { v: v, l: r.l, gi: i };
+      });
+      if (r.complete){
+        serSum += r.sum; serN++; sprSum += r.spread;
+        if (!hs || r.sum > hs.v) hs = { v: r.sum, l: r.l };
+        if (!ls || r.sum < ls.v) ls = { v: r.sum, l: r.l };
+        if (!ha || r.avg > ha.v) ha = { v: r.avg, l: r.l };
+        if (!la || r.avg < la.v) la = { v: r.avg, l: r.l };
+      }
+    });
+    return { rows: rows, avg: count ? pins/count : null, pins: pins, count: count, n200: n200,
+      hi: hi, lo: lo, hs: hs, ls: ls, ha: ha, la: la,
+      slotAvg: slotSum.map(function(t,i){ return slotN[i] ? t/slotN[i] : null; }),
+      serAvg: serN ? serSum/serN : null, sprAvg: serN ? sprSum/serN : null, weeks: serN };
+  }
+
+  /* ---------- tabs ---------- */
+  function sortedSeasons(){ return Array.from(state.seasons.values()).sort(function(a,b){ return (a.order||0) - (b.order||0); }); }
+  function renderTabs(){
+    var list = sortedSeasons();
+    var h = list.map(function(s){
+      return '<button class="tab" role="tab" data-id="' + esc(s.id) + '" aria-selected="' + (s.id === state.active) + '">' + esc(s.name) + '</button>';
+    }).join('');
+    if (state.canWrite) h += '<span id="nsHost"><button class="tab add" id="addSeason">+ Season</button></span>';
+    $('#tabs').innerHTML = h;
+  }
+
+  /* ---------- main sections ---------- */
+  function buildMain(){
+    var s = state.seasons.get(state.active);
+    var main = $('#main');
+    if (!s){
+      main.innerHTML = '<div class="card" style="padding:40px 16px;text-align:center"><p class="empty" style="padding:0 0 8px">No seasons yet.</p><p class="hint">' +
+        (state.canWrite ? 'Choose + Season above and enter a name like 2026-27 to start your first scoresheet.' : 'Nothing has been recorded here yet.') + '</p></div>';
+      state.built = null; return;
+    }
+    var rowsHtml = s.weeks.map(function(w, i){ return rowHtml(w, i); }).join('');
+    main.innerHTML =
+      '<section class="card hero"><div class="boards"></div><div class="hero-body">' +
+        '<div><div class="eyebrow">Season average</div><div class="big num" id="hAvg"></div>' +
+        '<div class="slots" id="hSlots"></div></div>' +
+        '<div class="facts" id="hFacts"></div></div></section>' +
+      '<section class="tiles" id="tiles"></section>' +
+      '<section class="card sect"><div class="sect-h"><h2>Week by week</h2><div class="legend">' +
+        '<span><i class="lg-dot"></i>Game</span><span><i class="lg-hot"></i>200 or more</span>' +
+        '<span><i class="lg-line"></i>Week average</span><span><i class="lg-dash"></i>Season average <b class="num" id="lgAvg"></b></span></div></div>' +
+        '<div id="chart"></div></section>' +
+      '<section class="card sect"><div class="sect-h"><h2>Scoresheet</h2><div class="tools">' +
+        '<button class="chip" id="prac" aria-pressed="' + state.practice + '">Count practice in averages</button>' +
+        (state.canWrite ? '<button class="chip primary" id="addWeek">+ Add week</button>' : '') + '</div></div>' +
+        '<div class="scroll"><table class="grid" id="grid"><thead><tr><th>Week</th><th>Game 1</th><th>Game 2</th><th>Game 3</th><th>Avg</th><th>Total</th><th class="hide-s">Spread</th><th></th></tr></thead>' +
+        '<tbody id="tbody">' + rowsHtml + '</tbody>' +
+        '<tfoot><tr><td>Avg</td><td id="fA"></td><td id="fB"></td><td id="fC"></td><td id="fAvg"></td><td id="fTot"></td><td class="hide-s" id="fSpr"></td><td></td></tr></tfoot></table></div>' +
+        '<p class="hint">Type a score and it saves on its own. Press Enter to jump to the next week. Spread is the gap between your best and worst game that week.</p></section>';
+    state.built = { id: s.id, n: s.weeks.length };
+  }
+  function rowHtml(w, i){
+    var ro = state.canWrite ? '' : ' readonly';
+    var cells = [0,1,2].map(function(k){
+      var v = w.g[k];
+      return '<td><input inputmode="numeric" maxlength="3" autocomplete="off" aria-label="' + esc(wkName(w.l)) + ' game ' + (k+1) + '" data-i="' + i + '" data-k="' + k + '" value="' + (v == null ? '' : v) + '"' + ro + ' placeholder="–"></td>';
+    }).join('');
+    return '<tr data-i="' + i + '"><td class="wk">' + esc(w.l) + '</td>' + cells +
+      '<td class="calc c-avg"></td><td class="calc c-tot"></td><td class="calc dim hide-s c-spr"></td>' +
+      '<td class="x">' + (state.canWrite ? '<button class="rm" data-i="' + i + '" aria-label="Remove ' + esc(wkName(w.l)) + '" title="Remove row">&times;</button>' : '') + '</td></tr>';
+  }
+
+  function renderDerived(){
+    var s = state.seasons.get(state.active); if (!s || !state.built) return;
+    var c = calc(s);
+    $('#hAvg').textContent = f1(c.avg);
+    $('#hSlots').innerHTML = [0,1,2].map(function(k){ return '<div class="slot"><b class="num">' + f1(c.slotAvg[k]) + '</b><span>Game ' + (k+1) + ' avg</span></div>'; }).join('');
+    $('#hFacts').innerHTML =
+      '<div class="fact"><b class="num">' + c.count + '</b><span>Games</span></div>' +
+      '<div class="fact"><b class="num">' + c.pins.toLocaleString() + '</b><span>Total pins</span></div>' +
+      '<div class="fact"><b class="num">' + c.n200 + '</b><span>200+ games</span></div>';
+    function tile(label, o, val, sub, hot){ return '<div class="card tile"><span class="l">' + label + '</span><span class="v num' + (hot ? ' hot' : '') + '">' + val + '</span><span class="w">' + sub + '</span></div>'; }
+    $('#tiles').innerHTML =
+      tile('High game', c.hi, c.hi ? c.hi.v : '–', c.hi ? wkName(c.hi.l) + ' · Game ' + (c.hi.gi+1) : 'No scores yet', c.hi && c.hi.v >= 200) +
+      tile('Low game', c.lo, c.lo ? c.lo.v : '–', c.lo ? wkName(c.lo.l) + ' · Game ' + (c.lo.gi+1) : 'No scores yet') +
+      tile('High series', c.hs, c.hs ? c.hs.v : '–', c.hs ? wkName(c.hs.l) : 'Needs a full week') +
+      tile('Low series', c.ls, c.ls ? c.ls.v : '–', c.ls ? wkName(c.ls.l) : 'Needs a full week') +
+      tile('Best week avg', c.ha, c.ha ? f1(c.ha.v) : '–', c.ha ? wkName(c.ha.l) : 'Needs a full week') +
+      tile('Low week avg', c.la, c.la ? f1(c.la.v) : '–', c.la ? wkName(c.la.l) : 'Needs a full week');
+    var trs = document.querySelectorAll('#tbody tr');
+    c.rows.forEach(function(r, i){
+      var tr = trs[i]; if (!tr) return;
+      tr.className = (r.prac ? 'prac ' : '') + (r.inc ? '' : 'out');
+      tr.querySelector('.c-avg').textContent = r.n ? f1(r.avg) : '';
+      tr.querySelector('.c-tot').textContent = r.n ? r.sum : '';
+      tr.querySelector('.c-spr').textContent = r.complete ? r.spread : '';
+      tr.querySelectorAll('input').forEach(function(inp, k){ inp.classList.toggle('hot', r.g[k] != null && r.g[k] >= 200); });
+    });
+    $('#fA').textContent = f1(c.slotAvg[0]); $('#fB').textContent = f1(c.slotAvg[1]); $('#fC').textContent = f1(c.slotAvg[2]);
+    $('#fAvg').textContent = f1(c.avg); $('#fTot').textContent = f1(c.serAvg); $('#fSpr').textContent = f1(c.sprAvg);
+    var lg = $('#lgAvg'); if (lg) lg.textContent = f1(c.avg);
+    drawChart(c);
+  }
+
+  /* ---------- chart ---------- */
+  function drawChart(c){
+    var wrap = $('#chart'); if (!wrap) return;
+    var pts = c.rows.filter(function(r){ return r.n > 0; });
+    if (!pts.length){ wrap.innerHTML = '<p class="empty">Enter a week of scores to see the trend.</p>'; return; }
+    var W = Math.max(wrap.clientWidth, 280), H = W < 520 ? 230 : 280;
+    var m = { l: 34, r: 10, t: 12, b: 26 };
+    var all = []; pts.forEach(function(r){ r.g.forEach(function(v){ if (v != null) all.push(v); }); });
+    var mn = Math.min.apply(null, all), mx = Math.max.apply(null, all);
+    var lo = Math.floor((mn - 8) / 20) * 20, hi = Math.ceil((mx + 8) / 20) * 20;
+    var step = [20, 25, 40, 50].filter(function(s){ return (hi - lo) / s <= 6; })[0] || 50;
+    lo = Math.floor(lo / step) * step; hi = Math.ceil(hi / step) * step;
+    var iw = W - m.l - m.r, ih = H - m.t - m.b, n = pts.length, sx = iw / n;
+    function X(i){ return m.l + (i + .5) * sx; }
+    function Y(v){ return m.t + ih - (v - lo) / (hi - lo) * ih; }
+    var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Scores by week. The full data is in the scoresheet below.">';
+    s += '<g class="ax">';
+    for (var t = lo; t <= hi; t += step){ s += '<line class="gl" x1="' + m.l + '" x2="' + (W - m.r) + '" y1="' + Y(t) + '" y2="' + Y(t) + '"/><text x="' + (m.l - 6) + '" y="' + (Y(t) + 4) + '" text-anchor="end">' + t + '</text>'; }
+    s += '</g>';
+    if (200 > lo && 200 < hi) s += '<line class="gl200" x1="' + m.l + '" x2="' + (W - m.r) + '" y1="' + Y(200) + '" y2="' + Y(200) + '"/>';
+    var every = (n > 14 && W < 520) ? 2 : 1;
+    s += '<g class="ax">';
+    pts.forEach(function(r, i){ if (i % every === 0) s += '<text x="' + X(i) + '" y="' + (H - 7) + '" text-anchor="middle">' + esc(r.l) + '</text>'; });
+    s += '</g>';
+    if (c.avg != null) s += '<line class="seasonline" x1="' + m.l + '" x2="' + (W - m.r) + '" y1="' + Y(c.avg) + '" y2="' + Y(c.avg) + '"/>';
+    var path = pts.map(function(r, i){ return (i ? 'L' : 'M') + X(i) + ' ' + Y(r.avg); }).join(' ');
+    s += '<path class="avgline" d="' + path + '"/>';
+    pts.forEach(function(r, i){
+      r.g.forEach(function(v, k){ if (v != null) s += '<circle class="dot' + (v >= 200 ? ' hot' : '') + (r.inc ? '' : ' off') + '" cx="' + (X(i) + (k - 1) * 0) + '" cy="' + Y(v) + '" r="4"/>'; });
+      s += '<circle class="avgdot' + (r.inc ? '' : ' off') + '" cx="' + X(i) + '" cy="' + Y(r.avg) + '" r="4.5"/>';
+    });
+    s += '<line class="cross" id="cross" x1="0" x2="0" y1="' + m.t + '" y2="' + (m.t + ih) + '" style="display:none"/>';
+    s += '<rect id="hit" x="' + m.l + '" y="' + m.t + '" width="' + iw + '" height="' + ih + '" fill="transparent"/></svg><div class="tip" id="tip" hidden></div>';
+    wrap.innerHTML = s;
+    var hit = $('#hit'), tip = $('#tip'), cross = $('#cross'), svg = wrap.querySelector('svg');
+    function show(e){
+      var rect = svg.getBoundingClientRect(), px = (e.clientX - rect.left) * (W / rect.width);
+      var i = Math.max(0, Math.min(n - 1, Math.floor((px - m.l) / sx))), r = pts[i];
+      cross.setAttribute('x1', X(i)); cross.setAttribute('x2', X(i)); cross.style.display = '';
+      tip.innerHTML = '<b>' + esc(wkName(r.l)) + '</b>' +
+        r.g.map(function(v, k){ return '<div><span>Game ' + (k+1) + '</span><span>' + (v == null ? '–' : v) + '</span></div>'; }).join('') +
+        '<div><span>Average</span><span>' + f1(r.avg) + '</span></div>';
+      tip.hidden = false;
+      var tx = X(i) * (rect.width / W) + 14, tw = tip.offsetWidth;
+      if (tx + tw > rect.width) tx = X(i) * (rect.width / W) - tw - 14;
+      tip.style.left = Math.max(0, tx) + 'px'; tip.style.top = '8px';
+    }
+    hit.addEventListener('pointermove', show); hit.addEventListener('pointerdown', show);
+    hit.addEventListener('pointerleave', function(){ tip.hidden = true; cross.style.display = 'none'; });
+  }
+
+  /* ---------- saving (this device only) ---------- */
+  var KEY = 'bowling-tracker:v1', tm;
+  function persist(){
+    var out = { v: 1, seasons: sortedSeasons().map(function(x){ return { id: x.id, name: x.name, order: x.order, weeks: x.weeks }; }) };
+    try { localStorage.setItem(KEY, JSON.stringify(out)); setStatus('Saved on this device'); }
+    catch(e){ setStatus('Could not save. Storage is blocked or full.'); }
+  }
+  function touch(){ setStatus('Saving...'); clearTimeout(tm); tm = setTimeout(persist, 250); }
+
+  /* ---------- events ---------- */
+  document.addEventListener('input', function(e){
+    var inp = e.target; if (!inp.matches || !inp.matches('#grid input')) return;
+    var cleaned = inp.value.replace(/\D/g, '').slice(0, 3);
+    if (cleaned !== inp.value) inp.value = cleaned;
+    var s = state.seasons.get(state.active); if (!s) return;
+    var i = +inp.dataset.i, k = +inp.dataset.k;
+    var v = cleaned === '' ? null : Math.min(300, parseInt(cleaned, 10));
+    if (v != null && v !== parseInt(cleaned, 10)) inp.value = v;
+    s.weeks[i].g[k] = v;
+    renderDerived(); touch(s.id);
+  });
+  document.addEventListener('keydown', function(e){
+    var inp = e.target;
+    if (e.key === 'Enter' && inp.matches && inp.matches('#grid input')){
+      var nxt = document.querySelector('#grid input[data-i="' + (+inp.dataset.i + 1) + '"][data-k="' + inp.dataset.k + '"]');
+      if (nxt){ nxt.focus(); nxt.select(); e.preventDefault(); } else inp.blur();
+    }
+    if (e.key === 'Enter' && inp.id === 'nsName'){ createSeason(); }
+  });
+  document.addEventListener('focusin', function(e){ if (e.target.matches && e.target.matches('#grid input')) e.target.select(); });
+  document.addEventListener('click', function(e){
+    var t = e.target.closest ? e.target.closest('button') : null; if (!t) return;
+    var s = state.seasons.get(state.active);
+    if (t.classList.contains('tab') && t.dataset.id){
+      state.active = t.dataset.id; try { localStorage.setItem('bt.season', state.active); } catch(x){}
+      renderTabs(); buildMain(); renderDerived(); return;
+    }
+    if (t.id === 'addSeason'){
+      $('#nsHost').innerHTML = '<span class="newseason"><input id="nsName" placeholder="2027-28" maxlength="9" aria-label="New season name"><button class="chip primary" id="nsGo">Create</button></span>';
+      $('#nsName').focus(); return;
+    }
+    if (t.id === 'nsGo'){ createSeason(); return; }
+    if (t.id === 'prac'){
+      state.practice = !state.practice; try { localStorage.setItem('bt.practice', state.practice ? '1' : '0'); } catch(x){}
+      t.setAttribute('aria-pressed', state.practice); renderDerived(); return;
+    }
+    if (!s) return;
+    if (t.id === 'addWeek'){
+      var nums = s.weeks.map(function(w){ return parseInt(w.l, 10); }).filter(function(n){ return !isNaN(n); });
+      var next = String((nums.length ? Math.max.apply(null, nums) : 0) + 1);
+      s.weeks.push({ l: next, g: [null, null, null] });
+      document.querySelector('#tbody').insertAdjacentHTML('beforeend', rowHtml(s.weeks[s.weeks.length - 1], s.weeks.length - 1));
+      state.built.n = s.weeks.length; renderDerived(); touch(s.id);
+      var last = document.querySelector('#tbody tr:last-child input'); if (last) last.focus();
+      return;
+    }
+    if (t.classList.contains('rm')){
+      if (!t.classList.contains('armed')){
+        t.classList.add('armed'); t.innerHTML = 'Remove?';
+        setTimeout(function(){ if (t.isConnected){ t.classList.remove('armed'); t.innerHTML = '&times;'; } }, 3000);
+        return;
+      }
+      s.weeks.splice(+t.dataset.i, 1); buildMain(); renderDerived(); touch(s.id);
+    }
+  });
+  function createSeason(){
+    var inp = $('#nsName'); var name = inp ? inp.value.trim() : ''; if (!name) { if (inp) inp.focus(); return; }
+    var id = 's' + name.replace(/[^0-9A-Za-z]/g, ''); if (id === 's') return;
+    if (!state.seasons.has(id)){
+      var weeks = [{ l: 'P1', g: [null,null,null] }, { l: 'P2', g: [null,null,null] }];
+      for (var i = 1; i <= 16; i++) weeks.push({ l: String(i), g: [null,null,null] });
+      var order = sortedSeasons().reduce(function(a, s){ return Math.max(a, s.order || 0); }, 0) + 1;
+      state.seasons.set(id, { id: id, name: name, order: order, weeks: weeks });
+      touch(id);
+    }
+    state.active = id; try { localStorage.setItem('bt.season', id); } catch(x){}
+    renderTabs(); buildMain(); renderDerived();
+  }
+  var rz; window.addEventListener('resize', function(){ clearTimeout(rz); rz = setTimeout(function(){ var s = state.seasons.get(state.active); if (s && state.built) drawChart(calc(s)); }, 120); });
+
+  /* ---------- data ---------- */
+  var SEED = [{"id":"s2425","name":"24-25","order":1,"weeks":[{"l":"P1","g":[211,152,237]},{"l":"1","g":[213,175,215]},{"l":"2","g":[143,162,165]},{"l":"3","g":[163,183,154]},{"l":"4","g":[162,180,205]},{"l":"5","g":[156,170,180]},{"l":"6","g":[125,224,244]},{"l":"7","g":[110,147,170]},{"l":"8","g":[181,240,191]},{"l":"9","g":[200,214,167]},{"l":"10","g":[171,213,175]},{"l":"11","g":[187,166,191]},{"l":"12","g":[142,178,175]}]},{"id":"s2526","name":"25-26","order":2,"weeks":[{"l":"P1","g":[152,157,144]},{"l":"P2","g":[133,179,192]},{"l":"1","g":[150,137,148]},{"l":"2","g":[165,193,153]},{"l":"3","g":[200,146,183]},{"l":"4","g":[155,194,177]},{"l":"5","g":[246,153,203]},{"l":"6","g":[233,235,199]},{"l":"7","g":[246,124,135]},{"l":"8","g":[182,169,162]},{"l":"9","g":[244,210,202]},{"l":"10","g":[200,201,215]},{"l":"11","g":[202,176,205]},{"l":"12","g":[181,204,203]},{"l":"13","g":[213,147,180]},{"l":"14","g":[214,149,188]},{"l":"15","g":[123,166,130]},{"l":"16","g":[203,142,189]}]},{"id":"s2627","name":"26-27","order":3,"weeks":[{"l":"P1","g":[150,201,211]},{"l":"P2","g":[191,192,123]},{"l":"1","g":[214,170,144]},{"l":"2","g":[205,181,174]},{"l":"3","g":[null,null,null]},{"l":"4","g":[null,null,null]},{"l":"5","g":[null,null,null]},{"l":"6","g":[null,null,null]},{"l":"7","g":[null,null,null]},{"l":"8","g":[null,null,null]},{"l":"9","g":[null,null,null]},{"l":"10","g":[null,null,null]},{"l":"11","g":[null,null,null]},{"l":"12","g":[null,null,null]},{"l":"13","g":[null,null,null]},{"l":"14","g":[null,null,null]},{"l":"15","g":[null,null,null]},{"l":"16","g":[null,null,null]}]}];
+  function ingest(list){
+    state.seasons.clear();
+    list.forEach(function(x){
+      if (!x || !x.id) return;
+      state.seasons.set(String(x.id), { id: String(x.id), name: String(x.name || x.id), order: +x.order || 0,
+        weeks: (x.weeks || []).map(function(w){ return { l: String(w.l), g: [0,1,2].map(function(k){ var v = w.g && w.g[k]; return Number.isFinite(v) ? Math.max(0, Math.min(300, Math.round(v))) : null; }) }; }) });
+    });
+  }
+  function pickActive(){
+    var list = sortedSeasons();
+    if (!list.length){ state.active = null; return; }
+    if (!state.seasons.has(state.active)){
+      var withScores = list.filter(function(s){ return s.weeks.some(function(w){ return w.g.some(function(v){ return v != null; }); }); });
+      state.active = (withScores.length ? withScores[withScores.length - 1] : list[list.length - 1]).id;
+    }
+  }
+  function refresh(){ pickActive(); renderTabs(); buildMain(); renderDerived(); }
+
+  document.getElementById('exp').addEventListener('click', function(){
+    var blob = new Blob([JSON.stringify({ v: 1, seasons: sortedSeasons() }, null, 1)], { type: 'application/json' });
+    var a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = 'bowling-scores-' + new Date().toISOString().slice(0,10) + '.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); }, 4000);
+    setStatus('Backup file created');
+  });
+  document.getElementById('imp').addEventListener('click', function(){ document.getElementById('file').click(); });
+  document.getElementById('file').addEventListener('change', function(e){
+    var f = e.target.files[0]; if (!f) return;
+    var r = new FileReader();
+    r.onload = function(){
+      try {
+        var data = JSON.parse(r.result);
+        if (!data || !Array.isArray(data.seasons) || !data.seasons.length) throw new Error('no seasons');
+        ingest(data.seasons); persist(); refresh(); setStatus('Restored ' + data.seasons.length + ' seasons');
+      } catch(err){ setStatus('That file is not a Bowling Tracker backup'); }
+    };
+    r.readAsText(f); e.target.value = '';
+  });
+
+  var raw = null, saved = null;
+  try { raw = localStorage.getItem(KEY); saved = raw ? JSON.parse(raw) : null; } catch(e){}
+  ingest(saved && Array.isArray(saved.seasons) && saved.seasons.length ? saved.seasons : SEED);
+  if (!saved) persist(); else setStatus('Saved on this device');
+  refresh();
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch(e){}
+  if ('serviceWorker' in navigator) window.addEventListener('load', function(){ navigator.serviceWorker.register('sw.js').catch(function(){}); });
+})();
+</script>
+</body>
+</html>
