@@ -19,18 +19,19 @@
 :root{
   --bg:#E9EEF2; --surface:#FFFFFF; --surface2:#F3F6F8; --ink:#12212E; --muted:#5B6B79; --line:#D5DDE4;
   --accent:#0E7C86; --hot:#C0332A; --hot-bg:#FBE6E3; --board-a:#F7F9FA; --board-b:#EEF2F5;
+  --s1:#0E7C86; --s2:#B7791F; --s3:#5B5FC7; --s4:#B5487A; --s5:#4E8F3A;
   --f-display:"Big Shoulders Display","Arial Narrow",Impact,sans-serif;
   --f-body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
     --bg:#0C151C; --surface:#14212B; --surface2:#1A2B37; --ink:#E6EEF3; --muted:#8FA3B2; --line:#263744;
-    --accent:#3CC0CC; --hot:#FF7A6B; --hot-bg:#3A1E1C; --board-a:#162531; --board-b:#12202A; color-scheme:dark;
+    --accent:#3CC0CC; --hot:#FF7A6B; --hot-bg:#3A1E1C; --board-a:#162531; --board-b:#12202A; --s1:#3CC0CC; --s2:#E8B04A; --s3:#9A9CF0; --s4:#E07AAE; --s5:#7CC46A; color-scheme:dark;
   }
 }
 :root[data-theme="dark"]{
   --bg:#0C151C; --surface:#14212B; --surface2:#1A2B37; --ink:#E6EEF3; --muted:#8FA3B2; --line:#263744;
-  --accent:#3CC0CC; --hot:#FF7A6B; --hot-bg:#3A1E1C; --board-a:#162531; --board-b:#12202A; color-scheme:dark;
+  --accent:#3CC0CC; --hot:#FF7A6B; --hot-bg:#3A1E1C; --board-a:#162531; --board-b:#12202A; --s1:#3CC0CC; --s2:#E8B04A; --s3:#9A9CF0; --s4:#E07AAE; --s5:#7CC46A; color-scheme:dark;
 }
 html{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);-webkit-text-size-adjust:100%}
 *{box-sizing:border-box}
@@ -106,6 +107,12 @@ h2{margin:0; font-family:var(--f-display); font-weight:700; font-size:22px; lett
 .tip{position:absolute; pointer-events:none; background:var(--ink); color:var(--bg); border-radius:8px; padding:8px 10px; font-size:12.5px; line-height:1.4; min-width:120px; z-index:2; box-shadow:0 4px 14px rgba(0,0,0,.18)}
 .tip b{display:block; font-size:13px; margin-bottom:2px}
 .tip div{display:flex; justify-content:space-between; gap:14px; font-variant-numeric:tabular-nums}
+.best{color:var(--accent); font-weight:700}
+.sw{display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:8px; vertical-align:middle}
+.open{border:0; background:transparent; padding:4px 0; font-weight:700; cursor:pointer; text-decoration:underline; text-decoration-color:var(--line); text-underline-offset:4px}
+.open:hover{text-decoration-color:var(--accent)}
+.cmp td,.cmp th{white-space:nowrap; padding:9px 8px}
+.ln{fill:none; stroke-width:2.25; stroke-linejoin:round; stroke-linecap:round}
 .empty{color:var(--muted); padding:28px 0; text-align:center; margin:0}
 
 .tools{display:flex; gap:8px; flex-wrap:wrap; align-items:center}
@@ -218,7 +225,8 @@ tfoot td{font-weight:700; border-bottom:0; border-top:2px solid var(--ink); padd
   function sortedSeasons(){ return Array.from(state.seasons.values()).sort(function(a,b){ return (a.order||0) - (b.order||0); }); }
   function renderTabs(){
     var list = sortedSeasons();
-    var h = list.map(function(s){
+    var h = '<button class="tab" role="tab" data-id="__home" aria-selected="' + (state.active === '__home') + '">Overview</button>';
+    h += list.map(function(s){
       return '<button class="tab" role="tab" data-id="' + esc(s.id) + '" aria-selected="' + (s.id === state.active) + '">' + esc(s.name) + '</button>';
     }).join('');
     if (state.canWrite) h += '<span id="nsHost"><button class="tab add" id="addSeason">+ Season</button></span>';
@@ -227,6 +235,7 @@ tfoot td{font-weight:700; border-bottom:0; border-top:2px solid var(--ink); padd
 
   /* ---------- main sections ---------- */
   function buildMain(){
+    if (state.active === '__home'){ buildOverview(); return; }
     var s = state.seasons.get(state.active);
     var main = $('#main');
     if (!s){
@@ -266,6 +275,7 @@ tfoot td{font-weight:700; border-bottom:0; border-top:2px solid var(--ink); padd
   }
 
   function renderDerived(){
+    if (state.active === '__home'){ renderOverview(); return; }
     var s = state.seasons.get(state.active); if (!s || !state.built) return;
     var c = calc(s);
     $('#hAvg').textContent = f1(c.avg);
@@ -295,6 +305,112 @@ tfoot td{font-weight:700; border-bottom:0; border-top:2px solid var(--ink); padd
     $('#fAvg').textContent = f1(c.avg); $('#fTot').textContent = f1(c.serAvg); $('#fSpr').textContent = f1(c.sprAvg);
     var lg = $('#lgAvg'); if (lg) lg.textContent = f1(c.avg);
     drawChart(c);
+  }
+
+  /* ---------- overview ---------- */
+  function seasonColor(i){ return 'var(--s' + ((i % 5) + 1) + ')'; }
+  function buildOverview(){
+    state.built = { id: '__home', n: 0 };
+    if (!state.seasons.size){ $('#main').innerHTML = '<div class="card" style="padding:40px 16px;text-align:center"><p class="empty">No seasons yet. Choose + Season above to start one.</p></div>'; return; }
+    $('#main').innerHTML =
+      '<section class="card hero"><div class="boards"></div><div class="hero-body">' +
+        '<div><div class="eyebrow">Career average</div><div class="big num" id="oAvg"></div><div class="slots" id="oSlots"></div></div>' +
+        '<div class="facts" id="oFacts"></div></div></section>' +
+      '<section class="card sect"><div class="sect-h"><h2>Season by season</h2><div class="tools">' +
+        '<button class="chip" id="prac" aria-pressed="' + state.practice + '">Count practice in averages</button></div></div>' +
+        '<div class="scroll"><table class="cmp"><thead><tr><th>Season</th><th>Avg</th><th>Change</th><th>Games</th><th>High game</th><th>High series</th><th>Low series</th><th>200+ games</th><th>Avg spread</th></tr></thead>' +
+        '<tbody id="cmpBody"></tbody></table></div>' +
+        '<p class="hint">Highlighted numbers are your best across seasons (lowest for spread, where steadier is better). Tap a season to open its scoresheet.</p></section>' +
+      '<section class="card sect"><div class="sect-h"><h2>Average as the season builds</h2><div class="legend" id="oLegend"></div></div>' +
+        '<div id="ochart" style="position:relative"></div>' +
+        '<p class="hint">Each line is your running average after each week bowled, so you can see where every season stood at the same point.</p></section>';
+  }
+  function renderOverview(){
+    if (!$('#cmpBody')) return;
+    var list = sortedSeasons();
+    var cs = list.map(function(s){ return calc(s); });
+    var pins = 0, games = 0, n200 = 0, hi = null, hiS = null, hs = null, hsS = null;
+    cs.forEach(function(c, i){
+      pins += c.pins; games += c.count; n200 += c.n200;
+      if (c.hi && (!hi || c.hi.v > hi.v)){ hi = c.hi; hiS = list[i]; }
+      if (c.hs && (!hs || c.hs.v > hs.v)){ hs = c.hs; hsS = list[i]; }
+    });
+    var bestI = -1; cs.forEach(function(c, i){ if (c.avg != null && (bestI < 0 || c.avg > cs[bestI].avg)) bestI = i; });
+    $('#oAvg').textContent = f1(games ? pins / games : null);
+    $('#oSlots').innerHTML =
+      '<div class="slot"><b class="num">' + (bestI >= 0 ? esc(list[bestI].name) : '–') + '</b><span>Best season' + (bestI >= 0 ? ' · ' + f1(cs[bestI].avg) : '') + '</span></div>' +
+      '<div class="slot"><b class="num">' + (hi ? hi.v : '–') + '</b><span>Career high game' + (hiS ? ' · ' + esc(hiS.name) : '') + '</span></div>' +
+      '<div class="slot"><b class="num">' + (hs ? hs.v : '–') + '</b><span>Career high series' + (hsS ? ' · ' + esc(hsS.name) : '') + '</span></div>';
+    $('#oFacts').innerHTML =
+      '<div class="fact"><b class="num">' + list.length + '</b><span>Seasons</span></div>' +
+      '<div class="fact"><b class="num">' + games + '</b><span>Games</span></div>' +
+      '<div class="fact"><b class="num">' + n200 + '</b><span>200+ games</span></div>';
+    function best(fn, low){ var b = null; cs.forEach(function(c){ var v = fn(c); if (v == null) return; if (b == null || (low ? v < b : v > b)) b = v; }); return b; }
+    var bAvg = best(function(c){ return c.avg; }), bHi = best(function(c){ return c.hi && c.hi.v; }),
+        bHs = best(function(c){ return c.hs && c.hs.v; }), bLs = best(function(c){ return c.ls && c.ls.v; }),
+        bRate = best(function(c){ return c.count ? c.n200 / c.count : null; }), bSpr = best(function(c){ return c.sprAvg; }, true);
+    function cell(v, txt, b){ return '<td class="num' + (v != null && v === b && cs.length > 1 ? ' best' : '') + '">' + txt + '</td>'; }
+    $('#cmpBody').innerHTML = cs.map(function(c, i){
+      var prev = i ? cs[i-1].avg : null, ch = (c.avg != null && prev != null) ? c.avg - prev : null;
+      var rate = c.count ? c.n200 / c.count : null;
+      return '<tr><td><button class="open" data-open="' + esc(list[i].id) + '"><i class="sw" style="background:' + seasonColor(i) + '"></i>' + esc(list[i].name) + '</button></td>' +
+        cell(c.avg, f1(c.avg), bAvg) +
+        '<td class="num">' + (ch == null ? '–' : (ch >= 0 ? '+' : '−') + f1(Math.abs(ch))) + '</td>' +
+        '<td class="num">' + c.count + '</td>' +
+        cell(c.hi && c.hi.v, c.hi ? c.hi.v : '–', bHi) +
+        cell(c.hs && c.hs.v, c.hs ? c.hs.v : '–', bHs) +
+        cell(c.ls && c.ls.v, c.ls ? c.ls.v : '–', bLs) +
+        cell(rate, c.n200 + (rate != null ? ' <span style="color:var(--muted);font-weight:400">(' + Math.round(rate * 100) + '%)</span>' : ''), bRate) +
+        cell(c.sprAvg, f1(c.sprAvg), bSpr) + '</tr>';
+    }).join('');
+    drawRunning();
+  }
+  function drawRunning(){
+    var wrap = $('#ochart'); if (!wrap) return;
+    var list = sortedSeasons();
+    var series = list.map(function(s, i){
+      var c = calc(s), p = 0, n = 0, pts = [];
+      c.rows.forEach(function(r){ if (!r.inc || !r.n) return; p += r.sum; n += r.n; pts.push({ v: p / n, l: r.l }); });
+      return { name: s.name, color: seasonColor(i), pts: pts };
+    }).filter(function(x){ return x.pts.length; });
+    $('#oLegend').innerHTML = series.map(function(x){ return '<span><i class="sw" style="background:' + x.color + '"></i>' + esc(x.name) + ' · ' + f1(x.pts[x.pts.length-1].v) + '</span>'; }).join('');
+    if (!series.length){ wrap.innerHTML = '<p class="empty">Enter some scores to compare seasons.</p>'; return; }
+    var W = Math.max(wrap.clientWidth, 280), H = W < 520 ? 230 : 280, m = { l: 34, r: 12, t: 12, b: 26 };
+    var maxN = Math.max.apply(null, series.map(function(x){ return x.pts.length; }));
+    var all = []; series.forEach(function(x){ x.pts.forEach(function(p){ all.push(p.v); }); });
+    var lo = Math.floor((Math.min.apply(null, all) - 4) / 10) * 10, hi = Math.ceil((Math.max.apply(null, all) + 4) / 10) * 10;
+    var step = [5, 10, 20, 25, 50].filter(function(s){ return (hi - lo) / s <= 6; })[0] || 50;
+    lo = Math.floor(lo / step) * step; hi = Math.ceil(hi / step) * step;
+    var iw = W - m.l - m.r, ih = H - m.t - m.b;
+    function X(i){ return maxN === 1 ? m.l + iw / 2 : m.l + i * iw / (maxN - 1); }
+    function Y(v){ return m.t + ih - (v - lo) / (hi - lo) * ih; }
+    var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Running average by week for each season. The table above has the season totals."><g class="ax">';
+    for (var t = lo; t <= hi; t += step) s += '<line class="gl" x1="' + m.l + '" x2="' + (W - m.r) + '" y1="' + Y(t) + '" y2="' + Y(t) + '"/><text x="' + (m.l - 6) + '" y="' + (Y(t) + 4) + '" text-anchor="end">' + t + '</text>';
+    var every = maxN > 12 && W < 520 ? 3 : (maxN > 12 ? 2 : 1);
+    for (var i = 0; i < maxN; i++) if (i % every === 0) s += '<text x="' + X(i) + '" y="' + (H - 7) + '" text-anchor="middle">' + (i + 1) + '</text>';
+    s += '</g>';
+    series.forEach(function(x){
+      s += '<path class="ln" style="stroke:' + x.color + '" d="' + x.pts.map(function(p, i){ return (i ? 'L' : 'M') + X(i) + ' ' + Y(p.v); }).join(' ') + '"/>';
+      var e = x.pts.length - 1;
+      s += '<circle cx="' + X(e) + '" cy="' + Y(x.pts[e].v) + '" r="4.5" style="fill:' + x.color + ';stroke:var(--surface);stroke-width:2"/>';
+    });
+    s += '<line class="cross" id="ocross" x1="0" x2="0" y1="' + m.t + '" y2="' + (m.t + ih) + '" style="display:none"/>';
+    s += '<rect id="ohit" x="' + (m.l - 8) + '" y="' + m.t + '" width="' + (iw + 16) + '" height="' + ih + '" fill="transparent"/></svg><div class="tip" id="otip" hidden></div>';
+    wrap.innerHTML = s;
+    var svg = wrap.querySelector('svg'), tip = $('#otip'), cross = $('#ocross');
+    function show(ev){
+      var rect = svg.getBoundingClientRect(), px = (ev.clientX - rect.left) * (W / rect.width);
+      var i = maxN === 1 ? 0 : Math.max(0, Math.min(maxN - 1, Math.round((px - m.l) / (iw / (maxN - 1)))));
+      cross.setAttribute('x1', X(i)); cross.setAttribute('x2', X(i)); cross.style.display = '';
+      tip.innerHTML = '<b>After week ' + (i + 1) + '</b>' + series.map(function(x){ var p = x.pts[i]; return '<div><span>' + esc(x.name) + '</span><span>' + (p ? f1(p.v) : '–') + '</span></div>'; }).join('');
+      tip.hidden = false;
+      var tx = X(i) * (rect.width / W) + 14, tw = tip.offsetWidth;
+      if (tx + tw > rect.width) tx = X(i) * (rect.width / W) - tw - 14;
+      tip.style.left = Math.max(0, tx) + 'px'; tip.style.top = '8px';
+    }
+    var hit = $('#ohit');
+    hit.addEventListener('pointermove', show); hit.addEventListener('pointerdown', show);
+    hit.addEventListener('pointerleave', function(){ tip.hidden = true; cross.style.display = 'none'; });
   }
 
   /* ---------- chart ---------- */
@@ -381,6 +497,10 @@ tfoot td{font-weight:700; border-bottom:0; border-top:2px solid var(--ink); padd
   document.addEventListener('click', function(e){
     var t = e.target.closest ? e.target.closest('button') : null; if (!t) return;
     var s = state.seasons.get(state.active);
+    if (t.dataset.open){
+      state.active = t.dataset.open; try { localStorage.setItem('bt.season', state.active); } catch(x){}
+      renderTabs(); buildMain(); renderDerived(); window.scrollTo(0, 0); return;
+    }
     if (t.classList.contains('tab') && t.dataset.id){
       state.active = t.dataset.id; try { localStorage.setItem('bt.season', state.active); } catch(x){}
       renderTabs(); buildMain(); renderDerived(); return;
@@ -426,7 +546,7 @@ tfoot td{font-weight:700; border-bottom:0; border-top:2px solid var(--ink); padd
     state.active = id; try { localStorage.setItem('bt.season', id); } catch(x){}
     renderTabs(); buildMain(); renderDerived();
   }
-  var rz; window.addEventListener('resize', function(){ clearTimeout(rz); rz = setTimeout(function(){ var s = state.seasons.get(state.active); if (s && state.built) drawChart(calc(s)); }, 120); });
+  var rz; window.addEventListener('resize', function(){ clearTimeout(rz); rz = setTimeout(function(){ if (state.active === '__home') { drawRunning(); return; } var s = state.seasons.get(state.active); if (s && state.built) drawChart(calc(s)); }, 120); });
 
   /* ---------- data ---------- */
   var SEED = [{"id":"s2425","name":"24-25","order":1,"weeks":[{"l":"P1","g":[211,152,237]},{"l":"1","g":[213,175,215]},{"l":"2","g":[143,162,165]},{"l":"3","g":[163,183,154]},{"l":"4","g":[162,180,205]},{"l":"5","g":[156,170,180]},{"l":"6","g":[125,224,244]},{"l":"7","g":[110,147,170]},{"l":"8","g":[181,240,191]},{"l":"9","g":[200,214,167]},{"l":"10","g":[171,213,175]},{"l":"11","g":[187,166,191]},{"l":"12","g":[142,178,175]}]},{"id":"s2526","name":"25-26","order":2,"weeks":[{"l":"P1","g":[152,157,144]},{"l":"P2","g":[133,179,192]},{"l":"1","g":[150,137,148]},{"l":"2","g":[165,193,153]},{"l":"3","g":[200,146,183]},{"l":"4","g":[155,194,177]},{"l":"5","g":[246,153,203]},{"l":"6","g":[233,235,199]},{"l":"7","g":[246,124,135]},{"l":"8","g":[182,169,162]},{"l":"9","g":[244,210,202]},{"l":"10","g":[200,201,215]},{"l":"11","g":[202,176,205]},{"l":"12","g":[181,204,203]},{"l":"13","g":[213,147,180]},{"l":"14","g":[214,149,188]},{"l":"15","g":[123,166,130]},{"l":"16","g":[203,142,189]}]},{"id":"s2627","name":"26-27","order":3,"weeks":[{"l":"P1","g":[150,201,211]},{"l":"P2","g":[191,192,123]},{"l":"1","g":[214,170,144]},{"l":"2","g":[205,181,174]},{"l":"3","g":[null,null,null]},{"l":"4","g":[null,null,null]},{"l":"5","g":[null,null,null]},{"l":"6","g":[null,null,null]},{"l":"7","g":[null,null,null]},{"l":"8","g":[null,null,null]},{"l":"9","g":[null,null,null]},{"l":"10","g":[null,null,null]},{"l":"11","g":[null,null,null]},{"l":"12","g":[null,null,null]},{"l":"13","g":[null,null,null]},{"l":"14","g":[null,null,null]},{"l":"15","g":[null,null,null]},{"l":"16","g":[null,null,null]}]}];
@@ -439,6 +559,7 @@ tfoot td{font-weight:700; border-bottom:0; border-top:2px solid var(--ink); padd
     });
   }
   function pickActive(){
+    if (state.active === '__home') return;
     var list = sortedSeasons();
     if (!list.length){ state.active = null; return; }
     if (!state.seasons.has(state.active)){
@@ -474,6 +595,7 @@ tfoot td{font-weight:700; border-bottom:0; border-top:2px solid var(--ink); padd
   try { raw = localStorage.getItem(KEY); saved = raw ? JSON.parse(raw) : null; } catch(e){}
   ingest(saved && Array.isArray(saved.seasons) && saved.seasons.length ? saved.seasons : SEED);
   if (!saved) persist(); else setStatus('Saved on this device');
+  state.active = '__home';
   refresh();
   try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch(e){}
   if ('serviceWorker' in navigator) window.addEventListener('load', function(){ navigator.serviceWorker.register('sw.js').catch(function(){}); });
