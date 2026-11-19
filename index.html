@@ -165,7 +165,7 @@ tfoot td{font-weight:700; border-bottom:0; border-top:2px solid var(--ink); padd
       </svg>
       <div><h1>Bowling Tracker</h1><p class="sub">Three games a week, season by season</p></div>
     </div>
-    <div class="bar"><span class="status" id="status" role="status" aria-live="polite"></span><button class="chip" id="exp" type="button">Back up</button><button class="chip" id="imp" type="button">Restore</button><input type="file" id="file" accept="application/json,.json"></div>
+    <div class="bar"><span class="status" id="status" role="status" aria-live="polite"></span><button class="chip primary" id="drv" type="button">Connect Drive</button><button class="chip" id="exp" type="button">Back up</button><button class="chip" id="imp" type="button">Restore</button><input type="file" id="file" accept="application/json,.json"></div>
   </header>
   <nav class="tabs" id="tabs" aria-label="Seasons" role="tablist"></nav>
   <main id="main" style="display:flex;flex-direction:column;gap:16px">
@@ -466,12 +466,124 @@ tfoot td{font-weight:700; border-bottom:0; border-top:2px solid var(--ink); padd
 
   /* ---------- saving (this device only) ---------- */
   var KEY = 'bowling-tracker:v1', tm;
-  function persist(){
-    var out = { v: 1, seasons: sortedSeasons().map(function(x){ return { id: x.id, name: x.name, order: x.order, weeks: x.weeks }; }) };
-    try { localStorage.setItem(KEY, JSON.stringify(out)); setStatus('Saved on this device'); }
-    catch(e){ setStatus('Could not save. Storage is blocked or full.'); }
+  function lsGet(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
+  function lsSet(k, v){ try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch(e){} }
+  function seasonsOut(){ return sortedSeasons().map(function(x){ return { id: x.id, name: x.name, order: x.order, weeks: x.weeks }; }); }
+  function localStamp(){ return +(lsGet('bt.updatedAt') || 0); }
+  /* stamp: time of the edit (bumps the stamp and queues a Drive backup); null keeps the stamp; noPush skips the backup */
+  function persist(stamp, noPush){
+    if (stamp != null) lsSet('bt.updatedAt', String(stamp));
+    try { localStorage.setItem(KEY, JSON.stringify({ v: 1, seasons: seasonsOut() })); setStatus('Saved on this device'); }
+    catch(e){ setStatus('Could not save. Storage is blocked or full.'); return; }
+    if (stamp && !noPush && drvOn()){ clearTimeout(drvTimer); drvTimer = setTimeout(function(){ runSync(false); }, 2500); }
   }
-  function touch(){ setStatus('Saving...'); clearTimeout(tm); tm = setTimeout(persist, 250); }
+  function touch(){ setStatus('Saving...'); clearTimeout(tm); tm = setTimeout(function(){ persist(Date.now()); }, 250); }
+
+  /* ---------- Google Drive sync (same Google project as FinancePilot) ---------- */
+  var GCID = '457443628758-8bkk4ss06ki435o0hqfjlabpqfmkk2bb.apps.googleusercontent.com';
+  var DSCOPE = 'https://www.googleapis.com/auth/drive.file', DAPI = 'https://www.googleapis.com/drive/v3/files';
+  var DFILE = 'bowling-tracker-sync.json', DFOLDER = 'Bowling Tracker';
+  var tok = null, drvTimer = null, drvBusy = false, drvAgain = false;
+  function drvOn(){ return lsGet('bt.drive') === '1'; }
+  function drvLabel(t){ var b = $('#drv'); if (b) b.textContent = t; }
+  function authErr(m){ var e = new Error(m); e.auth = true; return e; }
+  function cachedTok(){
+    if (tok && tok.exp > Date.now() + 60000) return tok.token;
+    try { var c = JSON.parse(lsGet('bt.tok')); if (c && c.exp > Date.now() + 60000){ tok = c; return c.token; } } catch(e){}
+    return null;
+  }
+  function loadGsi(){
+    return new Promise(function(res, rej){
+      if (window.google && google.accounts && google.accounts.oauth2) return res();
+      var s = document.createElement('script'); s.src = 'https://accounts.google.com/gsi/client';
+      s.onload = res; s.onerror = function(){ rej(new Error('Could not reach Google. Check your connection.')); };
+      document.head.appendChild(s);
+    });
+  }
+  function signIn(){
+    if (!/^https:\/\/smotzer\.github\.io$/.test(location.origin) && !/^http:\/\/localhost/.test(location.origin))
+      return Promise.reject(new Error('Drive sync works at smotzer.github.io/bowling-tracker'));
+    return loadGsi().then(function(){ return new Promise(function(res, rej){
+      var tc = google.accounts.oauth2.initTokenClient({ client_id: GCID, scope: DSCOPE,
+        callback: function(r){
+          if (r.error) return rej(new Error(r.error_description || r.error));
+          tok = { token: r.access_token, exp: Date.now() + ((r.expires_in || 3600) - 300) * 1000 };
+          lsSet('bt.tok', JSON.stringify(tok)); res(tok.token);
+        },
+        error_callback: function(x){ rej(authErr(x && x.type === 'popup_closed' ? 'Sign-in window closed.' : 'Could not sign in to Google.')); } });
+      tc.requestAccessToken({ prompt: drvOn() ? '' : 'consent' });
+    }); });
+  }
+  function gf(token, url, o){
+    o = o || {}; o.headers = Object.assign({ Authorization: 'Bearer ' + token }, o.headers || {});
+    return fetch(url, o).then(function(r){
+      if (r.status === 401){ tok = null; lsSet('bt.tok', null); throw authErr('Google sign-in expired.'); }
+      if (!r.ok) throw new Error('Google Drive said ' + r.status + '. Try again in a minute.');
+      return r;
+    });
+  }
+  function dfind(token, q){
+    return gf(token, DAPI + '?q=' + encodeURIComponent(q) + '&fields=' + encodeURIComponent('files(id,name,appProperties,modifiedTime)') + '&spaces=drive&pageSize=50')
+      .then(function(r){ return r.json(); }).then(function(j){ return j.files || []; });
+  }
+  function folderId(token){
+    return dfind(token, "name='" + DFOLDER + "' and mimeType='application/vnd.google-apps.folder' and trashed=false").then(function(f){
+      if (f.length) return f[0].id;
+      return gf(token, DAPI + '?fields=id', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: DFOLDER, mimeType: 'application/vnd.google-apps.folder' }) })
+        .then(function(r){ return r.json(); }).then(function(j){ return j.id; });
+    });
+  }
+  function dupload(token, id, name, parent, body, props){
+    var meta = id ? { appProperties: props } : { name: name, parents: [parent], mimeType: 'application/json', appProperties: props };
+    var b = 'bt' + Math.random().toString(36).slice(2);
+    var payload = '--' + b + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify(meta) + '\r\n--' + b + '\r\nContent-Type: application/json\r\n\r\n' + body + '\r\n--' + b + '--';
+    return gf(token, 'https://www.googleapis.com/upload/drive/v3/files' + (id ? '/' + id : '') + '?uploadType=multipart&fields=id',
+      { method: id ? 'PATCH' : 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + b }, body: payload }).then(function(r){ return r.json(); });
+  }
+  function dbody(){ return JSON.stringify({ v: 1, updatedAt: localStamp(), seasons: seasonsOut() }); }
+  /* one dated copy per day, so a bad edit can always be rolled back */
+  function daily(token, fid){
+    var d = new Date().toISOString().slice(0, 10);
+    if (lsGet('bt.daily') === d) return Promise.resolve();
+    var name = 'bowling-backup-' + d + '.json';
+    return dfind(token, "name='" + name + "' and '" + fid + "' in parents and trashed=false")
+      .then(function(f){ return dupload(token, f[0] && f[0].id, name, fid, dbody(), { kind: 'daily' }); })
+      .then(function(){ lsSet('bt.daily', d); });
+  }
+  /* newest edit wins: pull when Drive is newer, push when this device is newer */
+  function syncNow(token){
+    return folderId(token).then(function(fid){
+      return dfind(token, "name='" + DFILE + "' and '" + fid + "' in parents and trashed=false").then(function(files){
+        var f = files[0], remoteAt = f && f.appProperties ? (+f.appProperties.updatedAt || 0) : 0;
+        if (f && remoteAt > localStamp()){
+          return gf(token, DAPI + '/' + f.id + '?alt=media').then(function(r){ return r.json(); }).then(function(d){
+            if (d && Array.isArray(d.seasons) && d.seasons.length){ ingest(d.seasons); persist(remoteAt, true); refresh(); }
+            return 'pulled';
+          });
+        }
+        if (f && remoteAt === localStamp()) return daily(token, fid).then(function(){ return 'same'; });
+        return dupload(token, f && f.id, DFILE, fid, dbody(), { updatedAt: String(localStamp()) })
+          .then(function(){ return daily(token, fid); }).then(function(){ return 'pushed'; });
+      });
+    });
+  }
+  function runSync(interactive){
+    if (drvBusy){ drvAgain = true; return; }
+    var t = cachedTok();
+    if (!t && !interactive){ if (drvOn()){ drvLabel('Reconnect Drive'); } return; }
+    drvBusy = true; drvLabel('Syncing...');
+    (t ? Promise.resolve(t) : signIn()).then(function(token){ lsSet('bt.drive', '1'); return syncNow(token); })
+      .then(function(r){
+        lsSet('bt.lastSync', String(Date.now())); drvLabel('Drive synced');
+        setStatus(r === 'pulled' ? 'Loaded from Drive' : 'Backed up to Drive');
+      })
+      .catch(function(e){
+        if (e.auth){ drvLabel(drvOn() ? 'Reconnect Drive' : 'Connect Drive'); setStatus(drvOn() ? 'Tap Reconnect Drive to back up' : (e.message || '')); }
+        else { drvLabel('Retry Drive'); setStatus(e.message || 'Drive sync failed'); }
+      })
+      .then(function(){ drvBusy = false; if (drvAgain){ drvAgain = false; runSync(false); } });
+  }
 
   /* ---------- events ---------- */
   document.addEventListener('input', function(e){
@@ -585,7 +697,7 @@ tfoot td{font-weight:700; border-bottom:0; border-top:2px solid var(--ink); padd
       try {
         var data = JSON.parse(r.result);
         if (!data || !Array.isArray(data.seasons) || !data.seasons.length) throw new Error('no seasons');
-        ingest(data.seasons); persist(); refresh(); setStatus('Restored ' + data.seasons.length + ' seasons');
+        ingest(data.seasons); persist(Date.now()); refresh(); setStatus('Restored ' + data.seasons.length + ' seasons');
       } catch(err){ setStatus('That file is not a Bowling Tracker backup'); }
     };
     r.readAsText(f); e.target.value = '';
@@ -594,9 +706,17 @@ tfoot td{font-weight:700; border-bottom:0; border-top:2px solid var(--ink); padd
   var raw = null, saved = null;
   try { raw = localStorage.getItem(KEY); saved = raw ? JSON.parse(raw) : null; } catch(e){}
   ingest(saved && Array.isArray(saved.seasons) && saved.seasons.length ? saved.seasons : SEED);
-  if (!saved) persist(); else setStatus('Saved on this device');
+  if (!saved) persist(null);
+  else {
+    /* first run with sync: data you have edited counts as newer than any Drive copy; untouched starting data does not */
+    if (lsGet('bt.updatedAt') == null) lsSet('bt.updatedAt', JSON.stringify(saved.seasons) === JSON.stringify(SEED) ? '0' : String(Date.now()));
+    setStatus('Saved on this device');
+  }
   state.active = '__home';
   refresh();
+  document.getElementById('drv').addEventListener('click', function(){ runSync(true); });
+  if (drvOn()){ drvLabel(cachedTok() ? 'Drive synced' : 'Reconnect Drive'); runSync(false); }
+  document.addEventListener('visibilitychange', function(){ if (document.visibilityState === 'visible' && drvOn()) runSync(false); });
   try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch(e){}
   if ('serviceWorker' in navigator) window.addEventListener('load', function(){ navigator.serviceWorker.register('sw.js').catch(function(){}); });
 })();
