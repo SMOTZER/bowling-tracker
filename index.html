@@ -113,6 +113,8 @@ h2{margin:0; font-family:var(--f-display); font-weight:700; font-size:22px; lett
 .open:hover{text-decoration-color:var(--accent)}
 .cmp td,.cmp th{white-space:nowrap; padding:9px 8px}
 .ln{fill:none; stroke-width:2.25; stroke-linejoin:round; stroke-linecap:round}
+.sm{display:none}
+@media (max-width:560px){ .sm{display:inline} }
 .empty{color:var(--muted); padding:28px 0; text-align:center; margin:0}
 
 .tools{display:flex; gap:8px; flex-wrap:wrap; align-items:center}
@@ -142,9 +144,14 @@ tfoot td{font-weight:700; border-bottom:0; border-top:2px solid var(--ink); padd
 .hint{margin:10px 0 0; font-size:12.5px; color:var(--muted)}
 @media (max-width:560px){
   .hero-body{grid-template-columns:minmax(0,1fr)}
-  .hide-s{display:none}
+  td input{max-width:44px; padding:6px 0}
+  th,td{padding-left:2px; padding-right:2px}
+  th{font-size:10.5px; letter-spacing:.04em}
+  table{min-width:0; font-size:14px}
+  .hm{display:none}
+  td.x{width:24px} .rm{width:22px}
   td.wk{width:44px}
-  .sect{padding:14px 10px 12px}
+  .sect{padding:14px 6px 12px}
   h1{font-size:28px}
 }
 @media (prefers-reduced-motion: no-preference){ .tile,.tab,.chip{transition:background .15s,border-color .15s} }
@@ -257,9 +264,9 @@ tfoot td{font-weight:700; border-bottom:0; border-top:2px solid var(--ink); padd
       '<section class="card sect"><div class="sect-h"><h2>Scoresheet</h2><div class="tools">' +
         '<button class="chip" id="prac" aria-pressed="' + state.practice + '">Count practice in averages</button>' +
         (state.canWrite ? '<button class="chip primary" id="addWeek">+ Add week</button>' : '') + '</div></div>' +
-        '<div class="scroll"><table class="grid" id="grid"><thead><tr><th>Week</th><th>Game 1</th><th>Game 2</th><th>Game 3</th><th>Avg</th><th>Total</th><th class="hide-s">Spread</th><th></th></tr></thead>' +
+        '<div class="scroll"><table class="grid" id="grid"><thead><tr><th>Week</th><th><span class="hm">Game </span><span class="sm">G</span>1</th><th><span class="hm">Game </span><span class="sm">G</span>2</th><th><span class="hm">Game </span><span class="sm">G</span>3</th><th>Avg</th><th>Total</th><th>Spread</th><th></th></tr></thead>' +
         '<tbody id="tbody">' + rowsHtml + '</tbody>' +
-        '<tfoot><tr><td>Avg</td><td id="fA"></td><td id="fB"></td><td id="fC"></td><td id="fAvg"></td><td id="fTot"></td><td class="hide-s" id="fSpr"></td><td></td></tr></tfoot></table></div>' +
+        '<tfoot><tr><td>Avg</td><td id="fA"></td><td id="fB"></td><td id="fC"></td><td id="fAvg"></td><td id="fTot"></td><td id="fSpr"></td><td></td></tr></tfoot></table></div>' +
         '<p class="hint">Type a score and it saves on its own. Press Enter to jump to the next week. Spread is the gap between your best and worst game that week.</p></section>';
     state.built = { id: s.id, n: s.weeks.length };
   }
@@ -270,7 +277,7 @@ tfoot td{font-weight:700; border-bottom:0; border-top:2px solid var(--ink); padd
       return '<td><input inputmode="numeric" maxlength="3" autocomplete="off" aria-label="' + esc(wkName(w.l)) + ' game ' + (k+1) + '" data-i="' + i + '" data-k="' + k + '" value="' + (v == null ? '' : v) + '"' + ro + ' placeholder="–"></td>';
     }).join('');
     return '<tr data-i="' + i + '"><td class="wk">' + esc(w.l) + '</td>' + cells +
-      '<td class="calc c-avg"></td><td class="calc c-tot"></td><td class="calc dim hide-s c-spr"></td>' +
+      '<td class="calc c-avg"></td><td class="calc c-tot"></td><td class="calc dim c-spr"></td>' +
       '<td class="x">' + (state.canWrite ? '<button class="rm" data-i="' + i + '" aria-label="Remove ' + esc(wkName(w.l)) + '" title="Remove row">&times;</button>' : '') + '</td></tr>';
   }
 
