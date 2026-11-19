@@ -1,5 +1,5 @@
 // Bump CACHE when you change any app file so installed copies pick up the update.
-const CACHE = 'bowling-tracker-v4';
+const CACHE = 'bowling-tracker-v5';
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png',
   'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png', 'icons/favicon-32.png'];
 

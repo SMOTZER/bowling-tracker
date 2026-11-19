@@ -90,6 +90,9 @@ h2{margin:0; font-family:var(--f-display); font-weight:700; font-size:22px; lett
 .legend i{display:inline-block; vertical-align:middle; margin-right:6px}
 .lg-dot{width:9px; height:9px; border-radius:50%; background:var(--muted); opacity:.6}
 .lg-hot{width:9px; height:9px; border-radius:50%; background:var(--hot)}
+.lg-bar{width:10px; height:10px; border-radius:2px; background:var(--accent)}
+.sbar{fill:var(--accent)}
+.sbar.off{opacity:.3}
 .lg-line{width:18px; height:3px; background:var(--accent); border-radius:2px}
 .lg-dash{width:18px; height:0; border-top:2px dashed var(--muted)}
 #chart{position:relative}
@@ -261,6 +264,10 @@ tfoot td{font-weight:700; border-bottom:0; border-top:2px solid var(--ink); padd
         '<span><i class="lg-dot"></i>Game</span><span><i class="lg-hot"></i>200 or more</span>' +
         '<span><i class="lg-line"></i>Week average</span><span><i class="lg-dash"></i>Season average <b class="num" id="lgAvg"></b></span></div></div>' +
         '<div id="chart"></div></section>' +
+      '<section class="card sect"><div class="sect-h"><h2>Spread by week</h2><div class="legend">' +
+        '<span><i class="lg-bar"></i>Best game minus worst game</span><span><i class="lg-dash"></i>Season average <b class="num" id="lgSpr"></b></span></div></div>' +
+        '<div id="schart" style="position:relative"></div>' +
+        '<p class="hint">Shorter bars mean steadier weeks. Only weeks with all three games count.</p></section>' +
       '<section class="card sect"><div class="sect-h"><h2>Scoresheet</h2><div class="tools">' +
         '<button class="chip" id="prac" aria-pressed="' + state.practice + '">Count practice in averages</button>' +
         (state.canWrite ? '<button class="chip primary" id="addWeek">+ Add week</button>' : '') + '</div></div>' +
@@ -311,7 +318,7 @@ tfoot td{font-weight:700; border-bottom:0; border-top:2px solid var(--ink); padd
     $('#fA').textContent = f1(c.slotAvg[0]); $('#fB').textContent = f1(c.slotAvg[1]); $('#fC').textContent = f1(c.slotAvg[2]);
     $('#fAvg').textContent = f1(c.avg); $('#fTot').textContent = f1(c.serAvg); $('#fSpr').textContent = f1(c.sprAvg);
     var lg = $('#lgAvg'); if (lg) lg.textContent = f1(c.avg);
-    drawChart(c);
+    drawChart(c); drawSpread(c);
   }
 
   /* ---------- overview ---------- */
@@ -418,6 +425,45 @@ tfoot td{font-weight:700; border-bottom:0; border-top:2px solid var(--ink); padd
     var hit = $('#ohit');
     hit.addEventListener('pointermove', show); hit.addEventListener('pointerdown', show);
     hit.addEventListener('pointerleave', function(){ tip.hidden = true; cross.style.display = 'none'; });
+  }
+
+  function drawSpread(c){
+    var wrap = $('#schart'); if (!wrap) return;
+    var lg = $('#lgSpr'); if (lg) lg.textContent = f1(c.sprAvg);
+    var pts = c.rows.filter(function(r){ return r.complete; });
+    if (!pts.length){ wrap.innerHTML = '<p class="empty">Finish a week of three games to see its spread.</p>'; return; }
+    var W = Math.max(wrap.clientWidth, 280), H = W < 520 ? 200 : 240, m = { l: 34, r: 10, t: 12, b: 26 };
+    var mx = Math.max.apply(null, pts.map(function(r){ return r.spread; }));
+    var step = [10, 20, 25, 50].filter(function(s){ return Math.max(mx, 10) / s <= 5; })[0] || 50;
+    var hi = Math.max(step, Math.ceil(mx / step) * step);
+    var iw = W - m.l - m.r, ih = H - m.t - m.b, n = pts.length, sx = iw / n, bw = Math.max(4, Math.min(28, sx - 6));
+    function X(i){ return m.l + (i + .5) * sx; }
+    function Y(v){ return m.t + ih - v / hi * ih; }
+    var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Spread for each week. The numbers are in the Spread column of the scoresheet."><g class="ax">';
+    for (var t = 0; t <= hi; t += step) s += '<line class="gl" x1="' + m.l + '" x2="' + (W - m.r) + '" y1="' + Y(t) + '" y2="' + Y(t) + '"/><text x="' + (m.l - 6) + '" y="' + (Y(t) + 4) + '" text-anchor="end">' + t + '</text>';
+    var every = (n > 14 && W < 520) ? 2 : 1;
+    pts.forEach(function(r, i){ if (i % every === 0) s += '<text x="' + X(i) + '" y="' + (H - 7) + '" text-anchor="middle">' + esc(r.l) + '</text>'; });
+    s += '</g>';
+    pts.forEach(function(r, i){
+      var y = Y(r.spread), h = Math.max(1, m.t + ih - y), x = X(i) - bw / 2, rr = Math.min(4, bw / 2, h);
+      s += '<path class="sbar' + (r.inc ? '' : ' off') + '" d="M' + x + ' ' + (m.t + ih) + 'V' + (y + rr) + 'Q' + x + ' ' + y + ' ' + (x + rr) + ' ' + y + 'H' + (x + bw - rr) + 'Q' + (x + bw) + ' ' + y + ' ' + (x + bw) + ' ' + (y + rr) + 'V' + (m.t + ih) + 'Z"/>';
+    });
+    if (c.sprAvg != null) s += '<line class="seasonline" x1="' + m.l + '" x2="' + (W - m.r) + '" y1="' + Y(c.sprAvg) + '" y2="' + Y(c.sprAvg) + '"/>';
+    s += '<rect id="shit" x="' + m.l + '" y="' + m.t + '" width="' + iw + '" height="' + ih + '" fill="transparent"/></svg><div class="tip" id="stip" hidden></div>';
+    wrap.innerHTML = s;
+    var svg = wrap.querySelector('svg'), tip = $('#stip'), hit = $('#shit');
+    function show(e){
+      var rect = svg.getBoundingClientRect(), px = (e.clientX - rect.left) * (W / rect.width);
+      var i = Math.max(0, Math.min(n - 1, Math.floor((px - m.l) / sx))), r = pts[i];
+      tip.innerHTML = '<b>' + esc(wkName(r.l)) + '</b><div><span>Spread</span><span>' + r.spread + '</span></div>' +
+        '<div><span>Best game</span><span>' + Math.max.apply(null, r.g) + '</span></div><div><span>Worst game</span><span>' + Math.min.apply(null, r.g) + '</span></div>';
+      tip.hidden = false;
+      var tx = X(i) * (rect.width / W) + 14, tw = tip.offsetWidth;
+      if (tx + tw > rect.width) tx = X(i) * (rect.width / W) - tw - 14;
+      tip.style.left = Math.max(0, tx) + 'px'; tip.style.top = '8px';
+    }
+    hit.addEventListener('pointermove', show); hit.addEventListener('pointerdown', show);
+    hit.addEventListener('pointerleave', function(){ tip.hidden = true; });
   }
 
   /* ---------- chart ---------- */
@@ -665,7 +711,7 @@ tfoot td{font-weight:700; border-bottom:0; border-top:2px solid var(--ink); padd
     state.active = id; try { localStorage.setItem('bt.season', id); } catch(x){}
     renderTabs(); buildMain(); renderDerived();
   }
-  var rz; window.addEventListener('resize', function(){ clearTimeout(rz); rz = setTimeout(function(){ if (state.active === '__home') { drawRunning(); return; } var s = state.seasons.get(state.active); if (s && state.built) drawChart(calc(s)); }, 120); });
+  var rz; window.addEventListener('resize', function(){ clearTimeout(rz); rz = setTimeout(function(){ if (state.active === '__home') { drawRunning(); return; } var s = state.seasons.get(state.active); if (s && state.built){ var cc = calc(s); drawChart(cc); drawSpread(cc); } }, 120); });
 
   /* ---------- data ---------- */
   var SEED = [{"id":"s2425","name":"24-25","order":1,"weeks":[{"l":"P1","g":[211,152,237]},{"l":"1","g":[213,175,215]},{"l":"2","g":[143,162,165]},{"l":"3","g":[163,183,154]},{"l":"4","g":[162,180,205]},{"l":"5","g":[156,170,180]},{"l":"6","g":[125,224,244]},{"l":"7","g":[110,147,170]},{"l":"8","g":[181,240,191]},{"l":"9","g":[200,214,167]},{"l":"10","g":[171,213,175]},{"l":"11","g":[187,166,191]},{"l":"12","g":[142,178,175]}]},{"id":"s2526","name":"25-26","order":2,"weeks":[{"l":"P1","g":[152,157,144]},{"l":"P2","g":[133,179,192]},{"l":"1","g":[150,137,148]},{"l":"2","g":[165,193,153]},{"l":"3","g":[200,146,183]},{"l":"4","g":[155,194,177]},{"l":"5","g":[246,153,203]},{"l":"6","g":[233,235,199]},{"l":"7","g":[246,124,135]},{"l":"8","g":[182,169,162]},{"l":"9","g":[244,210,202]},{"l":"10","g":[200,201,215]},{"l":"11","g":[202,176,205]},{"l":"12","g":[181,204,203]},{"l":"13","g":[213,147,180]},{"l":"14","g":[214,149,188]},{"l":"15","g":[123,166,130]},{"l":"16","g":[203,142,189]}]},{"id":"s2627","name":"26-27","order":3,"weeks":[{"l":"P1","g":[150,201,211]},{"l":"P2","g":[191,192,123]},{"l":"1","g":[214,170,144]},{"l":"2","g":[205,181,174]},{"l":"3","g":[null,null,null]},{"l":"4","g":[null,null,null]},{"l":"5","g":[null,null,null]},{"l":"6","g":[null,null,null]},{"l":"7","g":[null,null,null]},{"l":"8","g":[null,null,null]},{"l":"9","g":[null,null,null]},{"l":"10","g":[null,null,null]},{"l":"11","g":[null,null,null]},{"l":"12","g":[null,null,null]},{"l":"13","g":[null,null,null]},{"l":"14","g":[null,null,null]},{"l":"15","g":[null,null,null]},{"l":"16","g":[null,null,null]}]}];
